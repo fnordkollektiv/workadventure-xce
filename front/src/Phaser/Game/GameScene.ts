@@ -77,6 +77,7 @@ import { emoteStore, emoteMenuStore } from "../../Stores/EmoteStore";
 import { userIsAdminStore } from "../../Stores/GameStore";
 import { contactPageStore } from "../../Stores/MenuStore";
 import { audioManagerFileStore, audioManagerVisibilityStore } from "../../Stores/AudioManagerStore";
+import { isSilentStore } from "../../Stores/MediaStore";
 
 import EVENT_TYPE = Phaser.Scenes.Events;
 import Texture = Phaser.Textures.Texture;
@@ -545,6 +546,9 @@ export class GameScene extends DirtyScene {
             document.querySelector("body")?.requestFullscreen();
         }
 
+        // Force silent state if requested
+        isSilentStore.set(localUserStore.getAlwaysSilent());
+
         //notify game manager can to create currentUser in map
         this.createCurrentPlayer();
         this.removeAllRemotePlayers(); //cleanup the list  of remote players in case the scene was rebooted
@@ -927,13 +931,9 @@ export class GameScene extends DirtyScene {
             }
         });
         this.gameMap.onPropertyChange(GameMapProperties.SILENT, (newValue, oldValue) => {
-            if (newValue === undefined || newValue === false || newValue === "") {
-                this.connection?.setSilent(false);
-                this.CurrentPlayer.noSilent();
-            } else {
-                this.connection?.setSilent(true);
-                this.CurrentPlayer.isSilent();
-            }
+            const silent = !!newValue || localUserStore.getAlwaysSilent();
+            this.connection?.setSilent(silent);
+            this.CurrentPlayer.setSilent(silent);
         });
         this.gameMap.onPropertyChange(GameMapProperties.PLAY_AUDIO, (newValue, oldValue, allProps) => {
             const volume = allProps.get(GameMapProperties.AUDIO_VOLUME) as number | undefined;
@@ -1916,12 +1916,15 @@ ${escapedMessage}
     }
 
     public stopJitsi(): void {
-        const silent = this.gameMap.getCurrentProperties().get(GameMapProperties.SILENT);
-        this.connection?.setSilent(!!silent);
+        this.connection?.setSilent(this.isSilentZone() || localUserStore.getAlwaysSilent());
         jitsiFactory.stop();
         mediaManager.showGameOverlay();
 
         mediaManager.removeTriggerCloseJitsiFrameButton("close-jitsi");
+    }
+
+    public isSilentZone(): boolean {
+        return !!this.gameMap.getCurrentProperties().get(GameMapProperties.SILENT);
     }
 
     //todo: put this into an 'orchestrator' scene (EntryScene?)
